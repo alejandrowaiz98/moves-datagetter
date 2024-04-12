@@ -1,34 +1,62 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"strconv"
 
+	translate "cloud.google.com/go/translate/apiv3"
+	"cloud.google.com/go/translate/apiv3/translatepb"
 	"github.com/mtslzr/pokeapi-go"
 	"github.com/xuri/excelize/v2"
+	"google.golang.org/api/option"
 )
 
 type Movement struct {
 	moveName, movePow, moveAcc, moveClass, moveType, moveEffect string
 }
 
+var translator *translate.TranslationClient
+var movesFile *excelize.File
+var newFile *excelize.File
+
+func init() {
+
+	t, err := getTranslator()
+
+	if err != nil {
+		log.Println(err)
+	}
+
+	translator = t
+
+	mf, err := excelize.OpenFile("movements.xlsx")
+
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	}
+
+	movesFile = mf
+
+}
+
 func main() {
 
-	moveFile, err := excelize.OpenFile("movements.xlsx")
+	defer translator.Close()
+
+	allRows, err := movesFile.GetRows("movements")
 
 	if err != nil {
 		log.Println(err)
 		panic(err)
 	}
 
-	allRows, err := moveFile.GetRows("movements")
+	var readingErrors []error
 
-	if err != nil {
-		log.Println(err)
-		panic(err)
-	}
-
-	var errors []error
+	//TODO: agregar errores de traduccion para separarlos del resto
+	//var translatingErrors []error
 	var moves []Movement
 
 	for i, rows := range allRows {
@@ -42,23 +70,104 @@ func main() {
 			m, err := pokeapi.Move(move)
 
 			if err != nil {
-				errors = append(errors, err)
+				readingErrors = append(readingErrors, err)
 				continue
 			}
 
 			var move Movement
 
-			move.moveName = m.Name
+			//TODO: agregar traduccion a los campos correspondientes (traducir a español y traducir Pow/Acc en formato D10)
+			move.moveName = m.Names[5].Name
 			move.movePow = strconv.Itoa(m.Power)
 			move.moveAcc = strconv.Itoa(m.Accuracy)
 			move.moveType = m.Type.Name
 			move.moveClass = m.DamageClass.Name
+			move.moveEffect = m.EffectEntries[0].Effect
 
 			moves = append(moves, move)
 		}
 
 	}
 
-	//TODO: agregar logica para escribir los movimientos encontrados en un nuevo excel
+	var excelColumns []string = []string{"A", "B", "C", "D", "E", "F"}
+	var writingErrors []error
+
+	newFile = excelize.NewFile()
+
+	var appendWritingErrors = func(err error) {
+
+		if err != nil {
+			writingErrors = append(writingErrors, err)
+		}
+
+	}
+
+	for i, move := range moves {
+
+		for j, columnLetter := range excelColumns {
+
+			coords := fmt.Sprintf("%v%v", columnLetter, i)
+
+			switch {
+
+			case j == 0:
+				appendWritingErrors(newFile.SetCellValue("Sheet1", coords, move.moveName))
+
+			case j == 1:
+				appendWritingErrors(newFile.SetCellValue("Sheet1", coords, move.movePow))
+
+			case j == 2:
+				appendWritingErrors(newFile.SetCellValue("Sheet1", coords, move.moveAcc))
+
+			case j == 3:
+				appendWritingErrors(newFile.SetCellValue("Sheet1", coords, move.moveType))
+
+			case j == 4:
+				appendWritingErrors(newFile.SetCellValue("Sheet1", coords, move.moveClass))
+
+			case j == 5:
+				appendWritingErrors(newFile.SetCellValue("Sheet1", coords, move.moveEffect))
+			}
+
+		}
+
+	}
+
+	//TODO: testear
+
+}
+
+// Dont forget to close the translator at the end with defer translator.Close()
+func getTranslator() (*translate.TranslationClient, error) {
+
+	ctx := context.Background()
+
+	//TODO: habilitar billing en google cloud para habilitar el translator
+	c, err := translate.NewTranslationClient(ctx, option.WithCredentialsFile("service-account.json"))
+
+	if err != nil {
+		log.Printf("err creating new translator: %v", err)
+		return nil, err
+	}
+
+	return c, nil
+
+}
+
+func translateToSpanish(ctx context.Context, translator *translate.TranslationClient) (string, error) {
+
+	req := &translatepb.TranslateTextRequest{
+		Contents:           []string{"hi"},
+		SourceLanguageCode: "en",
+		TargetLanguageCode: "spa",
+	}
+	resp, err := translator.TranslateText(ctx, req)
+
+	if err != nil {
+		log.Printf("err translating to spanish: %v", err)
+		return "", err
+	}
+	// TODO: Use resp.
+	return resp.String(), nil
 
 }
