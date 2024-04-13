@@ -87,6 +87,8 @@ func main() {
 			move.moveAcc = strconv.Itoa(m.Accuracy)
 			move.moveType = m.Type.Name
 			move.moveClass = m.DamageClass.Name
+
+			//TODO: buscar una descripcion corta del efecto y/o traducirlo
 			move.moveEffect = m.EffectEntries[0].Effect
 
 			moves = append(moves, move)
@@ -157,8 +159,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	//TODO: testear
 
 }
 
