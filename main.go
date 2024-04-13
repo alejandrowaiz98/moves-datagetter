@@ -17,19 +17,21 @@ type Movement struct {
 	moveName, movePow, moveAcc, moveClass, moveType, moveEffect string
 }
 
-var translator *translate.TranslationClient
+//var translator *translate.TranslationClient
+
+// Dont forget to close the file
 var movesFile *excelize.File
 var newFile *excelize.File
 
 func init() {
 
-	t, err := getTranslator()
+	// t, err := getTranslator()
 
-	if err != nil {
-		log.Println(err)
-	}
+	// if err != nil {
+	// 	log.Println(err)
+	// }
 
-	translator = t
+	// translator = t
 
 	mf, err := excelize.OpenFile("movements.xlsx")
 
@@ -44,7 +46,8 @@ func init() {
 
 func main() {
 
-	defer translator.Close()
+	//defer translator.Close()
+	defer movesFile.Close()
 
 	allRows, err := movesFile.GetRows("movements")
 
@@ -57,6 +60,7 @@ func main() {
 
 	//TODO: agregar errores de traduccion para separarlos del resto
 	//var translatingErrors []error
+
 	var moves []Movement
 
 	for i, rows := range allRows {
@@ -70,6 +74,7 @@ func main() {
 			m, err := pokeapi.Move(move)
 
 			if err != nil {
+				log.Printf("Err in move %v: %v", move, err)
 				readingErrors = append(readingErrors, err)
 				continue
 			}
@@ -89,6 +94,10 @@ func main() {
 
 	}
 
+	if len(readingErrors) > 0 {
+		log.Println(readingErrors)
+	}
+
 	var excelColumns []string = []string{"A", "B", "C", "D", "E", "F"}
 	var writingErrors []error
 
@@ -106,7 +115,7 @@ func main() {
 
 		for j, columnLetter := range excelColumns {
 
-			coords := fmt.Sprintf("%v%v", columnLetter, i)
+			coords := fmt.Sprintf("%v%v", columnLetter, i+1)
 
 			switch {
 
@@ -131,6 +140,22 @@ func main() {
 
 		}
 
+	}
+
+	if len(writingErrors) > 0 {
+		log.Printf("%v errors writing", writingErrors)
+		log.Println(writingErrors)
+	}
+
+	if len(readingErrors) > 0 {
+		log.Printf("%v errors reading", readingErrors)
+		log.Println(readingErrors)
+	}
+
+	err = newFile.SaveAs("movements_data.xlsx")
+
+	if err != nil {
+		panic(err)
 	}
 
 	//TODO: testear
